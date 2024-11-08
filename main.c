@@ -1,45 +1,103 @@
-monitor DiningPhilosophers {
-    enum { THINKING, HUNGRY, EATING } state[5]; // Define possible states for each philosopher: THINKING, HUNGRY, and EATING.
-    condition self[5];                          // Each philosopher has a condition variable for synchronizing access to resources (chopsticks).
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
 
-    // Function to pick up chopsticks (called when a philosopher wants to eat)
-    void pickup(int i) {
-        state[i] = HUNGRY;          // Set the philosopher's state to HUNGRY, indicating they want to eat.
-        test(i);                    // Check if the philosopher can eat (both neighbors are not eating).
-        
-        if (state[i] != EATING)     // If the philosopher couldn't start eating immediately,
-            self[i].wait();         // they wait until signaled that they can proceed (when chopsticks are available).
-    }
+// Number of philosophers
+#define N 5
 
-    // Function to put down chopsticks (called when a philosopher finishes eating)
-    void putdown(int i) {
-        state[i] = THINKING;        // Set the philosopher's state to THINKING, indicating they are done eating.
-        
-        // Test if the left neighbor can eat
-        test((i + 4) % 5);          // This checks the philosopher on the left, adjusting index with modulo for circular array.
-        
-        // Test if the right neighbor can eat
-        test((i + 1) % 5);          // This checks the philosopher on the right.
-    }
+// Enum to represent philosopher states
+enum { THINKING, HUNGRY, EATING } state[N];
 
-    // Function to check if a philosopher can start eating
-    void test(int i) {
-        // Conditions to allow philosopher i to eat:
-        // - The left neighbor is not eating
-        // - Philosopher i is hungry
-        // - The right neighbor is not eating
-        if ((state[(i + 4) % 5] != EATING) && 
-            (state[i] == HUNGRY) && 
-            (state[(i + 1) % 5] != EATING)) {
-                
-            state[i] = EATING;      // Set the philosopher's state to EATING (they can start eating).
-            self[i].signal();       // Signal the philosopher, allowing them to proceed if they were waiting.
-        }
-    }
+// Mutex for critical sections
+pthread_mutex_t mutex;
 
-    // Initialization code for setting up philosophers' initial states
-    initialization code() {
-        for (int i = 0; i < 5; i++) // Loop through each philosopher
-            state[i] = THINKING;    // Set each philosopher's initial state to THINKING.
+// Condition variables for each philosopher
+pthread_cond_t self[N];
+
+// Function declarations
+void pickup(int i);
+void putdown(int i);
+void test(int i);
+void* philosopher(void* num);
+
+// Initializes the philosophers to THINKING and sets up mutex and condition variables
+void init() {
+    pthread_mutex_init(&mutex, NULL);
+    for (int i = 0; i < N; i++) {
+        state[i] = THINKING;
+        pthread_cond_init(&self[i], NULL);
     }
 }
+
+// Philosopher attempts to pick up chopsticks
+// NOTE: starvation could occur here because of the waiting condition
+void pickup(int i) {
+    pthread_mutex_lock(&mutex); // Enter critical section
+    state[i] = HUNGRY; // Mark philosopher as HUNGRY
+    test(i); // Try to acquire both chopsticks
+    if (state[i] != EATING) // If unable to eat, wait for a signal (starvation)
+        pthread_cond_wait(&self[i], &mutex);
+    pthread_mutex_unlock(&mutex); // Leave critical section
+}
+
+// Philosopher puts down chopsticks
+void putdown(int i) {
+    pthread_mutex_lock(&mutex); // Enter critical section
+    state[i] = THINKING; // Mark philosopher as THINKING
+    test((i + N - 1) % N); // Test if left neighbor can eat
+    test((i + 1) % N); // Test if right neighbor can eat
+    pthread_mutex_unlock(&mutex); // Leave critical section
+}
+
+// Test if a philosopher can start eating
+void test(int i) {
+    if (state[(i + N - 1) % N] != EATING && // Left neighbor not eating
+        state[i] == HUNGRY && // Current philosopher is HUNGRY
+        state[(i + 1) % N] != EATING) { // Right neighbor not eating
+        
+        state[i] = EATING; // Set state to EATING
+        pthread_cond_signal(&self[i]); // Signal the philosopher to start eating
+    }
+}
+
+// Function run by each philosopher thread
+void* philosopher(void* num) {
+    int i = *(int*)num;
+
+    while (1) {
+        printf("Philosopher %d is thinking\n", i + 1);
+        sleep(1); // Thinking for a while
+
+        pickup(i); // Try to pick up chopsticks
+        printf("Philosopher %d is eating\n", i + 1);
+        sleep(1); // Eating for a while
+
+        putdown(i); // Put down chopsticks
+    }
+}
+
+int main() {
+    pthread_t tid[N];
+    int philosophers[N];
+
+    init(); // Initialize mutex and condition variables
+
+    for (int i = 0; i < N; i++) {
+        philosophers[i] = i;
+        pthread_create(&tid[i], NULL, philosopher, &philosophers[i]);
+    }
+
+    for (int i = 0; i < N; i++) {
+        pthread_join(tid[i], NULL); // Wait for all threads to finish (in this case, they run indefinitely)
+    }
+
+    return 0;
+}
+
+/*
+    must implement increasing priority while waiting (a counter for each philosopher)
+    or a similar condition that keeps track of philosophers who ate recently or ones that havent
+    so that those processes can run eventually without starving
+    ie. a counter that goes up to 5 and check it on the pickup, if it's reached 5 then let that
+    philosopher eat
+*/
