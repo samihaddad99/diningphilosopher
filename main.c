@@ -1,3 +1,16 @@
+/**
+ * Operating System Concepts (10th edition) Book pages: 
+ * 293-294 - dining philosopher problem explained
+ * 296 - code implemented from this page (translated from psuedo-code to C)
+ *      this is an impartial solution because of the possiblity of starvation
+ * 298 - provides counter type atomic_t, and functions atomic_set,atomic_add,atomic_sub, etc.
+ * 299 - POSIX synchronization, non-kernel methods to synchronization
+ * 299-300 - POSIX Mutex
+ * 300-302 - POSIX Named/Unnamed Semaphores
+ * 302-303 - POSIX Condition Variables: pthread_cond_init(&cond_var, &mutex);
+ *      condition variable that triggers a wait on the mutex
+*/
+
 #include <stdio.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -80,7 +93,8 @@ int main() {
     pthread_t tid[N];
     int philosophers[N];
 
-    init(); // Initialize mutex and condition variables
+    // initialize mutex and condition variables
+    init(); 
 
     for (int i = 0; i < N; i++) {
         philosophers[i] = i;
@@ -95,6 +109,7 @@ int main() {
 }
 
 /*
+    #TODO:
     must implement increasing priority while waiting (a counter for each philosopher)
     or a similar condition that keeps track of philosophers who ate recently or ones that havent
     so that those processes can run eventually without starving
